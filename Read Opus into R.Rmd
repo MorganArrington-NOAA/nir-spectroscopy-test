@@ -56,17 +56,16 @@ Load necessary packages
 
 if (!require("remotes")) install.packages("remotes")
 remotes::install_github("spectral-cockpit/opusreader2")
-library("opusreader2")
+library(opusreader2)
+library(ggplot2)
 
-
-packages <- c("dplyr", "tidyr","EMSC","purrr","devtools","simplerspec","hyperSpec","prospectr","data.table","opusreader2")
+packages <- c("dplyr", "tidyr","EMSC","purrr","devtools","simplerspec","hyperSpec","prospectr","data.table","opusreader2", "splitstackshape", "ggplot2")
 
 # Install packages not yet installed
-installed_packages <- packages %in% rownames(installed.packages())
+installed_packages <- packages %in% rownames(installed.packages()) 
 if (any(installed_packages == FALSE)) {
-  install.packages(packages[!installed_packages])
+  utils::install.packages(pkgs = packages[!installed_packages])
 }
-
 
 # Packages loading
 invisible(lapply(packages, library, character.only = TRUE))
@@ -89,7 +88,7 @@ are not too big to just get an updated one.
 
 #reset the file paths and names as needed
 
-meta<-read.csv("~/Esther AG/Production NIR/Outlier detection/nir scans walleye pollock Survey.csv") 
+meta<-read.csv("Z:/SpectraLibraryCopy/Walleye Pollock/2020/NIR_B20120A/NIR export exportQuery 1_4_2023.csv") 
 
 ```
 
@@ -135,7 +134,7 @@ just copied all the pollock files
 
 getwd() #I can only connect to the spectral library from home via VPN. Here I am practicing with copied files to make sure this works and not mess with the data library
 
-meta$file_path<-paste0(getwd(),"/SpectralLibraryCopy/",meta$common_name,"/",meta$collection_year,"/",meta$session_title,"/",meta$file_name)
+meta$file_path<-paste0("Z:","/SpectraLibraryCopy/",meta$common_name,"/",meta$collection_year,"/",meta$session_title,"/",meta$file_name)
 
 Opusfiles<-as.vector(meta$file_path)
 
@@ -277,7 +276,7 @@ wavenumbers
 #trial before the loop
 m<-dplyr::select(spectra[[2]],c(instrument, file_path,file_name))
   s<-dplyr::select(spectra[[2]],-c(instrument, file_path,file_name))
-         newv<-resample(s, wav=names(s),new.wav=wavenumbers,interpol="spline")
+         newv<-prospectr::resample(s, wav=names(s),new.wav=wavenumbers,interpol="spline")
          spcmatch<-as.data.frame(newv)
           spcmatch$file_id<-m$instrument
            spcmatch$instrument<-m$file_path
@@ -293,7 +292,7 @@ spectramatch<-list()
 for (i in 1:length(spectra)){
 m<-dplyr::select(spectra[[i]],c(instrument, file_path,file_name))
   s<-dplyr::select(spectra[[i]],-c(instrument, file_path,file_name))
-         newv<-resample(s, wav=names(s),new.wav=wavenumbers,interpol="spline")#this is a decisions to use spline and can be changed
+         newv<-prospectr::resample(s, wav=names(s),new.wav=wavenumbers,interpol="spline")#this is a decisions to use spline and can be changed
          spcmatch<-as.data.frame(newv)
           spcmatch$instrument<-m$instrument
            spcmatch$file_path<-m$file_path
@@ -325,13 +324,13 @@ rm(spectramatch)
 #df$file_name<-paste0(df$species,"_",df$file_id,".0",sep="")
 
 dfmeta<-dplyr::left_join(df,meta,by="file_name")#note that instrument names are different in the metadata file vs. OPUS files. 
-dfmeta<-dfmeta%>%dplyr::select(.,-c(instrument.x,instrument.y))
+dfmeta<-dfmeta%>%dplyr::select(.,-c(exists, file_path.x, file_path.y))
 
 rm(df)
 
 colnames(dfmeta)<-as.character(colnames(dfmeta))
 names(dfmeta)
-dfmeta_long<-tidyr::pivot_longer(dfmeta, cols=c(1:which( colnames(dfmeta)=="file_name")-2)) #make it long format to plot it
+dfmeta_long<-tidyr::pivot_longer(dfmeta, cols=c(1:(which(colnames(dfmeta)=="file_name")-2))) #make it long format to plot it
 
 dfmeta_long<-dfmeta_long%>%rename(.,"wavenumber"="name")
 dfmeta_long$wavenumber<-as.numeric(as.character(dfmeta_long$wavenumber))
@@ -342,7 +341,7 @@ dfmeta_long<-dfmeta_long[!is.na(dfmeta_long$collection_year),]
 
 #check a plot, here it's TANGO only
 ggplot()+
-  geom_path(data=dfmeta_long[dfmeta_long$instrument_name =="TANGO_AFSC"  & dfmetalong$collection_year %in% c("2014", "2015"),],aes(x=wavenumber,y=value,color=final_age,group=file_name),size=.5)+ 
+  geom_path(data=dfmeta_long,aes(x=wavenumber,y=value,color=final_age,group=file_name),size=.5)+ 
   scale_x_reverse()+
   #scale_color_viridis(name="Age (days)")+ #option="magma",
   labs(y="Absorbance units",x= expression(paste("Wavenumber ", cm^-1)))+
@@ -360,6 +359,10 @@ ggplot()+
   facet_wrap(~collection_year)
 
 #Looks good!
+
+#Export data
+write.csv(dfmeta, file = "Z:/SpectraLibraryCopy/Walleye Pollock/2020/NIR_B20120A/Walleye_Pollock_spectraldata_2020_Fishery_test.csv")
+write.csv(dfmeta_long, file = "Z:/SpectraLibraryCopy/Walleye Pollock/2020/NIR_B20120A/Walleye_Pollock_spectraldata_2020_Fishery_test_long.csv")
 
 #Remove the superfluous objects to clean up the workspace
 rm(list=ls()[! ls() %in% c("dfmeta_long","meta")])
